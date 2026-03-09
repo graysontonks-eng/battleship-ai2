@@ -206,6 +206,7 @@ function App() {
       if (allShipsSunk(result.ships)) {
         setPhase('gameOver');
         addMessage('You sunk all enemy ships! You win!', 'win');
+        isProcessingShot.current = false;
         return;
       }
 
@@ -232,6 +233,7 @@ function App() {
     setOrientation('horizontal');
     setHoverPos(null);
     setMessages([{ text: 'Place your ships to begin!', type: 'info' }]);
+    isProcessingShot.current = false;
   }, []);
 
   // Get preview cells for placement
