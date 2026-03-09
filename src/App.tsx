@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import './App.css';
 import type {
   Board,
@@ -49,6 +49,9 @@ function App() {
   const [currentShipIndex, setCurrentShipIndex] = useState(0);
   const [orientation, setOrientation] = useState<Orientation>('horizontal');
   const [hoverPos, setHoverPos] = useState<Position | null>(null);
+
+  // Shot processing lock to prevent rapid double-click race condition
+  const isProcessingShot = useRef(false);
 
   // Messages
   const [messages, setMessages] = useState<GameMessage[]>([
@@ -126,7 +129,17 @@ function App() {
       setPlayerBoard(result.board);
       setPlayerShips(result.ships);
 
-      const newAiState = updateAIAfterShot(currentAiState, target, result.result);
+      // If ship was sunk, find its positions so the AI can preserve
+      // hit queue entries from other ships it was tracking
+      let sunkShipPositions: Position[] | undefined;
+      if (result.result === 'sunk' && result.shipName) {
+        const sunkShip = result.ships.find((s) => s.name === result.shipName);
+        if (sunkShip) {
+          sunkShipPositions = sunkShip.positions;
+        }
+      }
+
+      const newAiState = updateAIAfterShot(currentAiState, target, result.result, sunkShipPositions);
       setAiState(newAiState);
 
       const coordLabel = getCoordinateLabel(target);
@@ -152,6 +165,7 @@ function App() {
       }
 
       setTurn('player');
+      isProcessingShot.current = false;
     },
     [addMessage]
   );
@@ -159,10 +173,15 @@ function App() {
   // Player attack
   const handlePlayerAttack = useCallback(
     (row: number, col: number) => {
+      if (isProcessingShot.current) return;
       if (phase !== 'playing' || turn !== 'player') return;
+      isProcessingShot.current = true;
 
       const cell = aiBoard[row][col];
-      if (cell === 'hit' || cell === 'miss' || cell === 'sunk') return;
+      if (cell === 'hit' || cell === 'miss' || cell === 'sunk') {
+        isProcessingShot.current = false;
+        return;
+      }
 
       const result = processShot(aiBoard, aiShips, { row, col });
       setAiBoard(result.board);

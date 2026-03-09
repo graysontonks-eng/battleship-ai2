@@ -108,7 +108,8 @@ export function getAIShot(aiState: AIState): Position {
 export function updateAIAfterShot(
   aiState: AIState,
   target: Position,
-  result: 'hit' | 'miss' | 'sunk'
+  result: 'hit' | 'miss' | 'sunk',
+  sunkShipPositions?: Position[]
 ): AIState {
   const newState: AIState = {
     shotsTaken: aiState.shotsTaken.map((row) => [...row]),
@@ -138,11 +139,30 @@ export function updateAIAfterShot(
       newState.firstHitInChain = target;
     }
   } else if (result === 'sunk') {
-    // Ship sunk - clear targeting state
-    newState.hitQueue = [];
-    newState.lastHit = null;
+    // Ship sunk - only remove hit queue entries that are adjacent to
+    // the sunk ship's positions. Preserve entries from other hit chains.
+    if (sunkShipPositions && sunkShipPositions.length > 0) {
+      const sunkAdjacent = new Set<string>();
+      for (const pos of sunkShipPositions) {
+        for (const adj of getAdjacentCells(pos)) {
+          sunkAdjacent.add(`${adj.row},${adj.col}`);
+        }
+      }
+      newState.hitQueue = newState.hitQueue.filter(
+        (q) => !sunkAdjacent.has(`${q.row},${q.col}`)
+      );
+    } else {
+      // Fallback: clear entire queue if no positions provided
+      newState.hitQueue = [];
+    }
+
+    // Reset direction tracking but keep lastHit if queue still has entries
+    // (meaning there's another ship being tracked)
     newState.huntDirection = null;
-    newState.firstHitInChain = null;
+    newState.firstHitInChain = newState.hitQueue.length > 0 ? newState.lastHit : null;
+    if (newState.hitQueue.length === 0) {
+      newState.lastHit = null;
+    }
   }
 
   return newState;
